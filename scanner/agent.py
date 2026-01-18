@@ -338,10 +338,32 @@ class ScanningAgent:
                             
                             st.write(f"📥 LLM returned response ({len(str(result))} chars)")
                             
+                            # Debug: Log raw LLM response preview
+                            result_preview = str(result)[:1000] if result else "None"
+                            if log_callback:
+                                log_callback(f"📥 LLM response preview (first 1000 chars): {result_preview}...")
+                            
                             # Parse findings
                             file_findings = parse_llm_findings(result)
                             
-                            # Debug: Show parsed findings count
+                            # Debug: Show parsed findings count and what was in response
+                            if log_callback:
+                                if not file_findings:
+                                    # Try to see what's in the response
+                                    try:
+                                        if isinstance(result, str):
+                                            result_json = json.loads(result)
+                                            if isinstance(result_json, dict):
+                                                if "findings" in result_json:
+                                                    findings_in_response = result_json.get("findings", [])
+                                                    log_callback(f"⚠️ Response has 'findings' key with {len(findings_in_response)} item(s)")
+                                                    if len(findings_in_response) > 0:
+                                                        log_callback(f"   First finding preview: {json.dumps(findings_in_response[0])[:200]}...")
+                                                else:
+                                                    log_callback(f"⚠️ Response keys: {list(result_json.keys())}")
+                                    except Exception as parse_err:
+                                        log_callback(f"⚠️ Could not parse response as JSON. First 500 chars: {str(result)[:500]}")
+                            
                             if st and file_findings:
                                 st.write(f"🔍 Parsed {len(file_findings)} finding(s) from JSON response")
                             
