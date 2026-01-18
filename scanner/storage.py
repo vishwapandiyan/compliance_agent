@@ -20,27 +20,25 @@ class S3Storage:
             region: AWS region (default: us-east-1)
         """
         self.bucket_name = bucket_name or os.environ.get('DEVGUARD_S3_BUCKET')
-        self.region = region
+        self.region = region or os.environ.get('AWS_REGION', 'us-east-1')
         
         if self.bucket_name:
             try:
-                self.s3_client = boto3.client('s3', region_name=region)
+                self.s3_client = boto3.client('s3', region_name=self.region)
                 # Test connection
                 self.s3_client.head_bucket(Bucket=self.bucket_name)
             except NoCredentialsError:
                 # If no credentials, S3 operations will fail gracefully
                 self.s3_client = None
-                print("⚠️ AWS credentials not found. S3 storage disabled.")
+                # Silently fail - don't print in production
+                pass
             except ClientError as e:
                 error_code = e.response['Error']['Code']
-                if error_code == '404':
-                    print(f"⚠️ S3 bucket '{self.bucket_name}' not found. S3 storage disabled.")
-                else:
-                    print(f"⚠️ S3 error: {e}. S3 storage disabled.")
                 self.s3_client = None
+                # Silently fail - don't print in production
+                pass
         else:
             self.s3_client = None
-            print("ℹ️ S3 bucket name not configured. S3 storage disabled.")
     
     def upload_report(self, findings: List[Dict], report_id: Optional[str] = None) -> Optional[str]:
         """
@@ -170,30 +168,28 @@ class DynamoDBStorage:
             region: AWS region (default: us-east-1)
         """
         self.table_name = table_name or os.environ.get('DEVGUARD_DYNAMODB_TABLE')
-        self.region = region
+        self.region = region or os.environ.get('AWS_REGION', 'us-east-1')
         
         if self.table_name:
             try:
-                self.dynamodb = boto3.resource('dynamodb', region_name=region)
+                self.dynamodb = boto3.resource('dynamodb', region_name=self.region)
                 self.table = self.dynamodb.Table(self.table_name)
                 # Test connection
                 self.table.meta.client.describe_table(TableName=self.table_name)
             except NoCredentialsError:
                 self.table = None
-                print("⚠️ AWS credentials not found. DynamoDB storage disabled.")
+                # Silently fail - don't print in production
+                pass
             except ClientError as e:
                 error_code = e.response['Error']['Code']
-                if error_code == 'ResourceNotFoundException':
-                    print(f"⚠️ DynamoDB table '{self.table_name}' not found. DynamoDB storage disabled.")
-                else:
-                    print(f"⚠️ DynamoDB error: {e}. DynamoDB storage disabled.")
                 self.table = None
+                # Silently fail - don't print in production
+                pass
         else:
             self.table = None
-            print("ℹ️ DynamoDB table name not configured. DynamoDB storage disabled.")
     
     def save_scan(self, user_id: str, scan_id: str, findings: List[Dict], 
-                  metadata: Optional[Dict] = None) -> bool:
+                  metadata: Optional[Dict] = None, s3_key: Optional[str] = None) -> bool:
         """
         Save scan results to DynamoDB.
         
@@ -202,6 +198,7 @@ class DynamoDBStorage:
             scan_id: Unique scan ID
             findings: List of finding dictionaries
             metadata: Optional metadata (file names, scan duration, etc.)
+            s3_key: Optional S3 key where report is stored
             
         Returns:
             True if successful, False otherwise
@@ -222,11 +219,14 @@ class DynamoDBStorage:
             if metadata:
                 item['metadata'] = json.dumps(metadata)
             
+            if s3_key:
+                item['s3_key'] = s3_key
+            
             self.table.put_item(Item=item)
             return True
             
         except ClientError as e:
-            print(f"❌ Error saving to DynamoDB: {e}")
+            # Silently fail - error will be logged by caller
             return False
     
     def get_user_scans(self, user_id: str, limit: int = 10) -> List[Dict]:

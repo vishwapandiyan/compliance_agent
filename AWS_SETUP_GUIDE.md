@@ -301,7 +301,7 @@ streamlit run app.py \
 
 **Open in browser:**
 ```
-http://<YOUR_ELASTIC_IP>:8501
+http://<54.237.175.69>:8501
 ```
 
 **Example:**

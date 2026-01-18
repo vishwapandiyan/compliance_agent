@@ -8,6 +8,7 @@ import os
 from scanner.agent import ScanningAgent
 from scanner.utils import export_findings_to_csv
 from scanner.storage import S3Storage, DynamoDBStorage
+import uuid
 
 
 st.set_page_config(
@@ -25,6 +26,14 @@ if 'scan_errors' not in st.session_state:
     st.session_state.scan_errors = []
 if 'scan_logs' not in st.session_state:
     st.session_state.scan_logs = []
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = str(uuid.uuid4())  # Generate unique session ID
+if 'scan_history' not in st.session_state:
+    st.session_state.scan_history = []
+if 's3_storage' not in st.session_state:
+    st.session_state.s3_storage = S3Storage()
+if 'dynamodb_storage' not in st.session_state:
+    st.session_state.dynamodb_storage = DynamoDBStorage()
 
 
 def main():
@@ -367,22 +376,21 @@ def main():
             # Try to export to local CSV first
             csv_exported = export_findings_to_csv(findings, csv_file)
             
-            # Initialize S3 storage (if configured)
-            s3_storage = S3Storage()
+            # Upload CSV to S3 (if configured)
             s3_key = None
             s3_url = None
             
-            if csv_exported and s3_storage.s3_client:
+            if csv_exported and st.session_state.s3_storage and st.session_state.s3_storage.s3_client:
                 # Upload CSV to S3
                 try:
                     with open(csv_file, 'r', encoding='utf-8') as f:
                         csv_content = f.read()
-                    s3_key = s3_storage.upload_csv_report(csv_content, report_id)
+                    s3_key = st.session_state.s3_storage.upload_csv_report(csv_content, report_id)
                     if s3_key:
-                        s3_url = s3_storage.get_report_url(s3_key, expires_in=86400)  # 24 hours
-                        st.success(f"✅ Report uploaded to S3: `{s3_key}`")
+                        s3_url = st.session_state.s3_storage.get_report_url(s3_key, expires_in=86400)  # 24 hours
+                        st.success(f"✅ CSV report uploaded to S3: `{s3_key}`")
                 except Exception as e:
-                    st.warning(f"⚠️ Could not upload to S3: {str(e)[:200]}")
+                    st.warning(f"⚠️ Could not upload CSV to S3: {str(e)[:200]}")
             
             # Show download button
             if csv_exported:
