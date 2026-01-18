@@ -196,8 +196,9 @@ nano .env
 **Set these values:**
 
 ```bash
-# Required
-GEMINI_API_KEY=your_actual_gemini_api_key_here
+# Gemini API Key (Optional - can be provided via frontend UI instead)
+# GEMINI_API_KEY=your_actual_gemini_api_key_here  # Uncomment if you want to pre-fill UI
+# If left empty, users will enter the API key directly in the Streamlit UI
 
 # AWS Configuration
 AWS_REGION=us-east-1  # Change to your region
@@ -208,6 +209,10 @@ DEVGUARD_DYNAMODB_TABLE=devguard-scans  # Your DynamoDB table name
 STREAMLIT_SERVER_PORT=8501
 STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ```
+
+**Note about Gemini API Key:**
+- **Option 1 (Recommended)**: Leave `GEMINI_API_KEY` empty or commented out. Users will enter their API key directly in the Streamlit web interface. This is more flexible and allows different users to use their own API keys.
+- **Option 2**: Set `GEMINI_API_KEY` in `.env` if you want to pre-fill the UI field for convenience. Users can still change it via the UI if needed.
 
 **Save and exit** (Ctrl+X, Y, Enter)
 
@@ -349,12 +354,14 @@ http://54.123.45.67:8501
 ### **Gemini API errors**
 
 1. **Check API key:**
-   - Verify `GEMINI_API_KEY` in `.env`
-   - Ensure no extra spaces/quotes
+   - If using `.env`: Verify `GEMINI_API_KEY` is set correctly (no extra spaces/quotes)
+   - If using frontend: Ensure user entered valid API key in the Streamlit UI
+   - API key should start with `AIza...`
 
 2. **Check rate limits:**
    - Free tier: 20 requests/day, 5 requests/minute
    - Wait if limit reached
+   - Each user's API key has its own rate limit quota
 
 ---
 
@@ -410,10 +417,11 @@ http://54.123.45.67:8501
 - [ ] Security group configured (port 8501 open)
 - [ ] Elastic IP allocated and associated
 - [ ] Application deployed on EC2
-- [ ] Environment variables configured
+- [ ] Environment variables configured (GEMINI_API_KEY optional - can use frontend UI)
 - [ ] AWS credentials configured (or IAM role)
 - [ ] Systemd service set up (optional)
 - [ ] Application accessible via Elastic IP:8501
+- [ ] User can enter Gemini API key via web UI
 - [ ] S3 upload tested
 
 ---

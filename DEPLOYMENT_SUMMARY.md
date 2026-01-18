@@ -59,8 +59,10 @@ devguard/
 Create a `.env` file on EC2 with:
 
 ```bash
-# Required
-GEMINI_API_KEY=your_gemini_api_key_here
+# Google Gemini API Key (Optional - can be provided via frontend UI instead)
+# Users can enter their API key directly in the Streamlit web interface
+# If you want to pre-fill the UI field, uncomment and set below:
+# GEMINI_API_KEY=your_gemini_api_key_here
 
 # AWS Configuration (Optional - for S3/DynamoDB)
 AWS_REGION=us-east-1
@@ -71,6 +73,8 @@ DEVGUARD_DYNAMODB_TABLE=devguard-scans
 STREAMLIT_SERVER_PORT=8501
 STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ```
+
+**Note:** The Gemini API key can be entered directly in the Streamlit UI. Setting it in `.env` is optional and only pre-fills the UI field for convenience.
 
 ---
 
