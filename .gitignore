@@ -71,3 +71,6 @@ tmp/
 Thumbs.db
 .DS_Store
 
+# Empty directories (from deleted multi-agent system)
+scanner/agents/
+scanner/nodes/
