@@ -182,8 +182,51 @@ def main():
             
             add_log(f"Scan completed! Found {len(findings)} security issues")
             st.session_state.scan_results = findings
+            
+            # Generate scan ID and metadata
+            scan_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+            scan_metadata = {
+                'file_count': len(uploaded_files),
+                'file_names': [f.name for f in uploaded_files],
+                'scan_duration': None,  # Could track this if needed
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Upload JSON report to S3 first (so we can reference it in DynamoDB)
+            s3_json_key = None
+            if st.session_state.s3_storage and st.session_state.s3_storage.s3_client and findings:
+                try:
+                    s3_json_key = st.session_state.s3_storage.upload_report(findings, report_id=scan_id)
+                    if s3_json_key:
+                        add_log(f"✅ JSON report uploaded to S3: {s3_json_key}")
+                except Exception as e:
+                    add_log(f"⚠️ Could not upload JSON to S3: {str(e)[:200]}")
+            
+            # Save to DynamoDB (including S3 key reference)
+            dynamodb_saved = False
+            if st.session_state.dynamodb_storage and st.session_state.dynamodb_storage.table:
+                try:
+                    dynamodb_saved = st.session_state.dynamodb_storage.save_scan(
+                        user_id=st.session_state.user_id,
+                        scan_id=scan_id,
+                        findings=findings,
+                        metadata=scan_metadata,
+                        s3_key=s3_json_key
+                    )
+                    if dynamodb_saved:
+                        add_log(f"✅ Scan history saved to DynamoDB (Scan ID: {scan_id})")
+                except Exception as e:
+                    add_log(f"⚠️ Could not save to DynamoDB: {str(e)[:200]}")
+            
             progress_bar.progress(100)
-            status_text.success(f"✅ LLM-powered scan completed! Found {len(findings)} issues.")
+            
+            # Success message with storage status
+            success_msg = f"✅ LLM-powered scan completed! Found {len(findings)} issues."
+            if dynamodb_saved:
+                success_msg += " | 💾 Saved to DynamoDB"
+            if s3_json_key:
+                success_msg += " | 📦 Uploaded to S3"
+            status_text.success(success_msg)
         
         except ValueError as e:
             error_msg = f"Configuration error: {str(e)}"
