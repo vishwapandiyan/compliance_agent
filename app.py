@@ -247,6 +247,73 @@ def main():
     elif scan_button and not uploaded_files:
         st.warning("⚠️ Please upload at least one file to scan")
     
+    # Show AWS Storage Status
+    st.markdown("---")
+    with st.expander("💾 **AWS Storage Status**", expanded=False):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**S3 Storage**")
+            if st.session_state.s3_storage and st.session_state.s3_storage.s3_client:
+                st.success(f"✅ Connected to bucket: `{st.session_state.s3_storage.bucket_name}`")
+            else:
+                st.info("ℹ️ S3 not configured (set `DEVGUARD_S3_BUCKET` in `.env`)")
+        
+        with col2:
+            st.markdown("**DynamoDB Storage**")
+            if st.session_state.dynamodb_storage and st.session_state.dynamodb_storage.table:
+                st.success(f"✅ Connected to table: `{st.session_state.dynamodb_storage.table_name}`")
+            else:
+                st.info("ℹ️ DynamoDB not configured (set `DEVGUARD_DYNAMODB_TABLE` in `.env`)")
+        
+        st.caption(f"📋 Session ID: `{st.session_state.user_id}` (used for scan history)")
+    
+    # Show Scan History from DynamoDB
+    if st.session_state.dynamodb_storage and st.session_state.dynamodb_storage.table:
+        st.markdown("---")
+        with st.expander("📜 **Scan History** (from DynamoDB)", expanded=False):
+            try:
+                history = st.session_state.dynamodb_storage.get_user_scans(
+                    user_id=st.session_state.user_id,
+                    limit=10
+                )
+                
+                if history:
+                    st.info(f"Found {len(history)} previous scan(s)")
+                    for idx, scan in enumerate(history, 1):
+                        with st.container():
+                            col1, col2, col3 = st.columns([3, 1, 1])
+                            with col1:
+                                st.markdown(f"**Scan #{idx}**: {scan.get('scan_id', 'N/A')}")
+                                st.caption(f"📅 {scan.get('timestamp', 'N/A')}")
+                            with col2:
+                                findings_count = scan.get('total_findings', 0)
+                                if findings_count > 0:
+                                    st.metric("Issues", findings_count)
+                                else:
+                                    st.success("✅ Clean")
+                            with col3:
+                                if st.button(f"View Details", key=f"history_{scan.get('scan_id')}"):
+                                    st.session_state[f"view_scan_{scan.get('scan_id')}"] = True
+                            
+                            # Show details if button clicked
+                            if st.session_state.get(f"view_scan_{scan.get('scan_id')}", False):
+                                st.markdown("---")
+                                scan_findings = scan.get('findings', [])
+                                if scan_findings:
+                                    st.markdown("**Findings:**")
+                                    for finding in scan_findings[:5]:  # Show first 5
+                                        st.markdown(f"- **{finding.get('risk_type', 'N/A')}** ({finding.get('severity', 'N/A')}) in `{finding.get('file_name', 'N/A')}`")
+                                    if len(scan_findings) > 5:
+                                        st.caption(f"... and {len(scan_findings) - 5} more finding(s)")
+                                else:
+                                    st.success("✅ No security issues found")
+                                st.markdown("---")
+                else:
+                    st.info("No previous scans found. Complete a scan to see history here.")
+            except Exception as e:
+                st.warning(f"⚠️ Could not load scan history: {str(e)[:200]}")
+    
     # Always show persistent errors/logs section even if no scan in progress
     if st.session_state.scan_errors or (st.session_state.scan_logs and len(st.session_state.scan_logs) > 0):
         st.markdown("---")
