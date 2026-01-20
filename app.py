@@ -74,29 +74,85 @@ def main():
     
     st.markdown("---")
     
-    # File upload section
-    st.subheader("📁 Upload Project Files")
-    uploaded_files = st.file_uploader(
-        "Upload your project files for security scanning",
-        type=['py', 'js', 'ts', 'json', 'yml', 'yaml', 'env', 'txt', 'md', 'java', 'go', 'rs', 'php', 'rb'],
-        accept_multiple_files=True,
-        help="Select one or more files to scan. Common file types: .py, .js, .json, .yml, .env, etc."
+    # Input method selection
+    st.subheader("📁 Choose Input Method")
+    input_method = st.radio(
+        "Select how you want to provide files for scanning:",
+        ["Upload Files", "GitHub Repository"],
+        horizontal=True
     )
     
-    if uploaded_files:
-        st.info(f"📎 **{len(uploaded_files)} file(s) selected** for scanning")
-        with st.expander("📋 View uploaded files", expanded=False):
-            for file in uploaded_files:
-                st.write(f"• {file.name} ({file.size} bytes)")
+    st.markdown("---")
+    
+    uploaded_files = None
+    github_url = None
+    
+    if input_method == "Upload Files":
+        # File upload section
+        st.subheader("📁 Upload Project Files")
+        uploaded_files = st.file_uploader(
+            "Upload your project files for security scanning",
+            type=['py', 'js', 'ts', 'json', 'yml', 'yaml', 'env', 'txt', 'md', 'java', 'go', 'rs', 'php', 'rb'],
+            accept_multiple_files=True,
+            help="Select one or more files to scan. Common file types: .py, .js, .json, .yml, .env, etc."
+        )
+        
+        if uploaded_files:
+            st.info(f"📎 **{len(uploaded_files)} file(s) selected** for scanning")
+            with st.expander("📋 View uploaded files", expanded=False):
+                for file in uploaded_files:
+                    st.write(f"• {file.name} ({file.size} bytes)")
+    
+    else:  # GitHub Repository
+        # GitHub URL input section
+        st.subheader("🔗 GitHub Repository")
+        github_url = st.text_input(
+            "Enter GitHub Repository URL",
+            placeholder="https://github.com/username/repository",
+            help="Enter the full GitHub repository URL. Public repositories only (or provide a personal access token for private repos)."
+        )
+        
+        # Optional: GitHub token for private repos
+        with st.expander("🔐 Advanced: Private Repository Access (Optional)", expanded=False):
+            github_token = st.text_input(
+                "GitHub Personal Access Token",
+                type="password",
+                placeholder="ghp_...",
+                help="Required only for private repositories. Generate at: https://github.com/settings/tokens"
+            )
+            if github_token:
+                os.environ["GITHUB_TOKEN"] = github_token
+        
+        if github_url:
+            # Validate GitHub URL
+            if not github_url.startswith("https://github.com/"):
+                st.warning("⚠️ Please enter a valid GitHub URL (must start with https://github.com/)")
+            else:
+                st.success(f"✅ Repository URL: `{github_url}`")
+                # Extract repo info
+                parts = github_url.rstrip('/').split('/')
+                if len(parts) >= 5:
+                    owner = parts[-2]
+                    repo = parts[-1].replace('.git', '')
+                    st.info(f"📦 Repository: **{owner}/{repo}**")
     
     st.markdown("---")
     
     # Scan button
     scan_button = st.button("🔍 Start LLM-Powered Scan", type="primary", disabled=st.session_state.scan_in_progress)
     
-    if scan_button and uploaded_files:
+    if scan_button:
+        # Validate inputs
         if not nvidia_api_key:
             st.error("⚠️ Please enter your NVIDIA API key to enable LLM-powered analysis")
+            return
+        
+        if input_method == "Upload Files" and not uploaded_files:
+            st.error("⚠️ Please upload files to scan")
+            return
+        
+        if input_method == "GitHub Repository" and not github_url:
+            st.error("⚠️ Please enter a GitHub repository URL")
             return
         
         if not uploaded_files or len(uploaded_files) == 0:
@@ -174,12 +230,101 @@ def main():
             add_log("Agent initialized successfully")
             progress_bar.progress(20)
             
-            # Run LLM-powered scan on uploaded files
-            add_log(f"Starting file scan... {len(uploaded_files)} file(s) to analyze")
-            status_text.info("🤖 LLM Agent is analyzing uploaded files...")
+            # Handle GitHub repository or uploaded files
+            files_to_scan = []
+            
+            if input_method == "GitHub Repository":
+                add_log(f"Cloning GitHub repository: {github_url}")
+                status_text.info("📥 Cloning GitHub repository...")
+                
+                try:
+                    import git
+                    import tempfile
+                    import shutil
+                    
+                    # Create temporary directory for cloning
+                    clone_dir = tempfile.mkdtemp(prefix='devguard_github_')
+                    add_log(f"Created temporary directory: {clone_dir}")
+                    
+                    # Clone repository
+                    try:
+                        if "GITHUB_TOKEN" in os.environ:
+                            # Use token for authentication
+                            token = os.environ["GITHUB_TOKEN"]
+                            auth_url = github_url.replace("https://", f"https://{token}@")
+                            git.Repo.clone_from(auth_url, clone_dir, depth=1)
+                        else:
+                            # Public repository
+                            git.Repo.clone_from(github_url, clone_dir, depth=1)
+                        
+                        add_log(f"✅ Repository cloned successfully")
+                        progress_bar.progress(30)
+                        
+                        # Collect files from cloned repository
+                        add_log("Collecting files from repository...")
+                        supported_extensions = ['.py', '.js', '.ts', '.json', '.yml', '.yaml', '.env', '.txt', '.md', '.java', '.go', '.rs', '.php', '.rb']
+                        
+                        import io
+                        for root, dirs, files in os.walk(clone_dir):
+                            # Skip .git directory
+                            if '.git' in root:
+                                continue
+                            
+                            for filename in files:
+                                file_path = os.path.join(root, filename)
+                                file_ext = os.path.splitext(filename)[1].lower()
+                                
+                                if file_ext in supported_extensions:
+                                    try:
+                                        with open(file_path, 'rb') as f:
+                                            file_content = f.read()
+                                        
+                                        # Create file-like object for Streamlit compatibility
+                                        file_obj = io.BytesIO(file_content)
+                                        file_obj.name = os.path.relpath(file_path, clone_dir)
+                                        file_obj.size = len(file_content)
+                                        files_to_scan.append(file_obj)
+                                    except Exception as file_err:
+                                        add_log(f"⚠️ Skipping {filename}: {str(file_err)}")
+                        
+                        add_log(f"✅ Collected {len(files_to_scan)} file(s) from repository")
+                        
+                        # Clean up cloned repository
+                        try:
+                            shutil.rmtree(clone_dir)
+                            add_log("Cleaned up temporary clone directory")
+                        except:
+                            pass  # Ignore cleanup errors
+                        
+                    except git.exc.GitCommandError as git_err:
+                        error_msg = str(git_err)
+                        if "Authentication failed" in error_msg or "401" in error_msg:
+                            add_error("GitHub authentication failed. Please provide a valid Personal Access Token for private repositories.", git_err)
+                            st.error("❌ GitHub authentication failed. For private repositories, please provide a Personal Access Token.")
+                            return
+                        else:
+                            add_error(f"Failed to clone repository: {error_msg}", git_err)
+                            st.error(f"❌ Failed to clone repository: {error_msg}")
+                            return
+                    
+                except ImportError:
+                    add_error("GitPython not installed. Please install: pip install GitPython", None)
+                    st.error("❌ GitPython not installed. Please run: `pip install GitPython`")
+                    return
+                
+                if not files_to_scan:
+                    st.warning("⚠️ No supported files found in repository")
+                    return
+            
+            else:  # Upload Files
+                files_to_scan = uploaded_files
+            
+            # Run LLM-powered scan
+            add_log(f"Starting file scan... {len(files_to_scan)} file(s) to analyze")
+            status_text.info("🤖 LLM Agent is analyzing files...")
             
             # Process files and get findings (stored incrementally in session state)
-            findings = agent.scan_uploaded_files(uploaded_files, add_log)
+            findings = agent.scan_uploaded_files(files_to_scan, add_log)
             
             add_log(f"Scan completed! Found {len(findings)} security issues")
             st.session_state.scan_results = findings
