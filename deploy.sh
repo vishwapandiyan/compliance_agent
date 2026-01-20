@@ -75,12 +75,14 @@ if [ ! -f ".env" ]; then
     if [ -f ".env.example" ]; then
         echo -e "${YELLOW}   Creating .env from .env.example...${NC}"
         cp .env.example .env
-        echo -e "${GREEN}   ℹ️  GEMINI_API_KEY is optional - can be provided via frontend UI instead${NC}"
+        echo -e "${GREEN}   ℹ️  NVIDIA_API_KEY is optional - can be provided via frontend UI instead${NC}"
     else
         echo -e "${YELLOW}   Creating .env file...${NC}"
         cat > .env << EOF
-# Google Gemini API Key (Optional - can be provided via frontend UI instead)
-# GEMINI_API_KEY=your_key_here  # Uncomment if you want to pre-fill UI
+# NVIDIA API Key (Optional - can be provided via frontend UI instead)
+# NVIDIA_API_KEY=your_key_here  # Uncomment if you want to pre-fill UI
+# NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1  # Default, usually don't need to change
+# NVIDIA_MODEL=meta/llama-3.2-3b-instruct  # Default model
 
 # AWS Configuration (Optional)
 AWS_REGION=us-east-1
@@ -91,7 +93,7 @@ DEVGUARD_DYNAMODB_TABLE=
 STREAMLIT_SERVER_PORT=8501
 STREAMLIT_SERVER_ADDRESS=0.0.0.0
 EOF
-        echo -e "${GREEN}   ℹ️  GEMINI_API_KEY is optional - users can enter it via the web UI${NC}"
+        echo -e "${GREEN}   ℹ️  NVIDIA_API_KEY is optional - users can enter it via the web UI${NC}"
     fi
 else
     echo -e "${GREEN}   ✓ .env file already exists${NC}"
@@ -113,12 +115,12 @@ echo ""
 echo -e "${YELLOW}📋 Next Steps:${NC}"
 echo -e "   1. Configure AWS credentials (if using S3/DynamoDB):"
 echo -e "      aws configure"
-echo -e "   2. Edit .env file (optional - to pre-fill Gemini API key):"
-echo -e "      nano .env"
-echo -e "      # GEMINI_API_KEY is optional - users can enter it via web UI"
-echo -e "   3. Start the application:"
-echo -e "      ./start.sh"
-echo -e "   4. Access the app and enter Gemini API key in the web UI"
+    echo -e "   2. Edit .env file (optional - to pre-fill NVIDIA API key):"
+    echo -e "      nano .env"
+    echo -e "      # NVIDIA_API_KEY is optional - users can enter it via web UI"
+    echo -e "   3. Start the application:"
+    echo -e "      ./start.sh"
+    echo -e "   4. Access the app and enter NVIDIA API key in the web UI"
 echo ""
 echo -e "${YELLOW}   Or use systemd service:${NC}"
 echo -e "      sudo systemctl start devguard"

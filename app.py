@@ -39,35 +39,36 @@ if 'dynamodb_storage' not in st.session_state:
 def main():
     st.title("🛡️ DevGuard - LLM-Powered Compliance Risk Monitoring Agent")
     st.markdown("**Autonomous AI agent with advanced reasoning for security and compliance scanning**")
-    st.info("🤖 This agent uses LLM (Google Gemini) to autonomously reason about code security, detect risks, and provide intelligent advice.")
+    st.info("🤖 This agent uses LLM (NVIDIA API with Llama 3.2) to autonomously reason about code security, detect risks, and provide intelligent advice.")
     
     # Important: Show rate limit info
-    with st.expander("⚠️ **Important: Gemini API Limits (Free Tier)**", expanded=False):
-        st.warning("""
-        **Gemini Free Tier Limits:**
-        - 📊 **Daily Quota:** 20 requests per day (resets at midnight Pacific Time)
-        - ⏱️ **Rate Limit:** 5 requests per minute
+    with st.expander("⚠️ **Important: NVIDIA API Information**", expanded=False):
+        st.info("""
+        **NVIDIA API:**
+        - 🚀 **Model:** Llama 3.2 3B Instruct (via NVIDIA API)
+        - ⚡ **Fast Response:** Optimized for security analysis
+        - 🔒 **Secure:** API key required for access
         
-        **Recommendations:**
-        - Scan small projects (3-5 files) to stay within limits
-        - Wait between scans if you hit the daily quota
-        - Upgrade to paid tier for higher limits: https://ai.google.dev/pricing
+        **Get your API key:**
+        - Visit: https://build.nvidia.com/
+        - Sign up and get your API key
+        - Enter it in the field below
         """)
     
     st.markdown("---")
     
     # Input section
     st.subheader("🔑 API Configuration")
-    gemini_api_key = st.text_input(
-        "Gemini API Key",
+    nvidia_api_key = st.text_input(
+        "NVIDIA API Key",
         type="password",
-        help="Enter your Google Gemini API key for LLM-powered analysis",
-        placeholder="AIza...",
-        value=os.environ.get("GEMINI_API_KEY", "")
+        help="Enter your NVIDIA API key for LLM-powered analysis",
+        placeholder="nvapi-...",
+        value=os.environ.get("NVIDIA_API_KEY", "")
     )
     
-    if gemini_api_key:
-        os.environ["GEMINI_API_KEY"] = gemini_api_key
+    if nvidia_api_key:
+        os.environ["NVIDIA_API_KEY"] = nvidia_api_key
     
     st.markdown("---")
     
@@ -94,8 +95,8 @@ def main():
     scan_button = st.button("🔍 Start LLM-Powered Scan", type="primary", disabled=st.session_state.scan_in_progress)
     
     if scan_button and uploaded_files:
-        if not gemini_api_key:
-            st.error("⚠️ Please enter your Gemini API key to enable LLM-powered analysis")
+        if not nvidia_api_key:
+            st.error("⚠️ Please enter your NVIDIA API key to enable LLM-powered analysis")
             return
         
         if not uploaded_files or len(uploaded_files) == 0:
@@ -169,7 +170,7 @@ def main():
             progress_bar.progress(10)
             
             # Initialize LLM-powered agent
-            agent = ScanningAgent(llm_api_key=gemini_api_key)
+            agent = ScanningAgent(llm_api_key=nvidia_api_key)
             add_log("Agent initialized successfully")
             progress_bar.progress(20)
             

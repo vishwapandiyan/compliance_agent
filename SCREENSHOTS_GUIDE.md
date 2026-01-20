@@ -363,3 +363,5 @@ This document describes the key screenshots to capture for documentation and pre
 
 **Note**: Actual screenshots should be captured from the running application. The descriptions above guide what each screenshot should contain.
 
+
+

@@ -29,9 +29,9 @@ if [ -f ".env" ]; then
     export $(cat .env | grep -v '^#' | xargs)
 fi
 
-# Check if GEMINI_API_KEY is set (optional - can be provided via frontend UI)
-if [ -z "$GEMINI_API_KEY" ]; then
-    echo -e "${YELLOW}ℹ️  GEMINI_API_KEY not set in .env - users can enter it via the web UI${NC}"
+# Check if NVIDIA_API_KEY is set (optional - can be provided via frontend UI)
+if [ -z "$NVIDIA_API_KEY" ]; then
+    echo -e "${YELLOW}ℹ️  NVIDIA_API_KEY not set in .env - users can enter it via the web UI${NC}"
     echo -e "${YELLOW}   The application will prompt users to enter their API key in the Streamlit interface${NC}"
 fi
 

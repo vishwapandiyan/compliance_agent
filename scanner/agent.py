@@ -7,21 +7,6 @@ import re
 import tempfile
 import shutil
 
-# No longer need create_agent - using direct sequential processing instead
-
-try:
-    from langchain_google_genai import ChatGoogleGenerativeAI
-except ImportError:
-    # Fallback if langchain_google_genai not available
-    try:
-        from langchain_community.chat_models import ChatGoogleGenerativeAI
-    except ImportError:
-        ChatGoogleGenerativeAI = None
-        raise ImportError(
-            "Could not import ChatGoogleGenerativeAI. Install with: "
-            "pip install langchain-google-genai"
-        )
-
 try:
     import streamlit as st
 except ImportError:
@@ -39,18 +24,20 @@ class ScanningAgent:
         Initialize the LLM-powered scanning agent.
         
         Args:
-            llm_api_key: Gemini API key. If None, reads from GEMINI_API_KEY env var.
+            llm_api_key: NVIDIA API key. If None, reads from NVIDIA_API_KEY env var.
         """
-        self.api_key = llm_api_key or os.environ.get("GEMINI_API_KEY")
+        self.api_key = llm_api_key or os.environ.get("NVIDIA_API_KEY")
         if not self.api_key:
-            raise ValueError("LLM API key is required. Set GEMINI_API_KEY environment variable or pass llm_api_key.")
+            raise ValueError("LLM API key is required. Set NVIDIA_API_KEY environment variable or pass llm_api_key.")
         
-        # Initialize Gemini LLM
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-3-flash-preview",  # Google Gemini model
-            google_api_key=self.api_key,
-            temperature=0.2,  # Lower temperature for more focused analysis
-        )
+        # Store API key in environment for llm_scan_tool to use
+        os.environ["NVIDIA_API_KEY"] = self.api_key
+        
+        # Set default NVIDIA configuration if not already set
+        if "NVIDIA_BASE_URL" not in os.environ:
+            os.environ["NVIDIA_BASE_URL"] = "https://integrate.api.nvidia.com/v1"
+        if "NVIDIA_MODEL" not in os.environ:
+            os.environ["NVIDIA_MODEL"] = "meta/llama-3.2-3b-instruct"
         
         self.collected_findings = []  # Store findings collected from sequential processing
         self.chunk_filter = CodeChunkFilter()  # Initialize code chunk filter
@@ -228,12 +215,12 @@ class ScanningAgent:
                     files_in_batch = set(chunk.get('source_file', 'unknown') for chunk in batch)
                     log_callback(f"   Batch {batch_idx}: {len(batch)} chunks from files: {', '.join(files_in_batch)}")
             
-            # Add initial wait for rate limiting
+            # Add initial wait for rate limiting (NVIDIA API is more lenient)
             if st:
-                st.write("⏳ Waiting 15 seconds before starting LLM analysis (rate limit protection)...")
+                st.write("⏳ Waiting 2 seconds before starting LLM analysis (rate limit protection)...")
             if log_callback:
-                log_callback(f"⏳ Initial wait: 15 seconds")
-            time.sleep(15)
+                log_callback(f"⏳ Initial wait: 2 seconds")
+            time.sleep(2)
             
             # STEP 3: Process batches sequentially - each batch = one LLM request
             for batch_idx, batch in enumerate(batches, 1):
@@ -252,11 +239,11 @@ class ScanningAgent:
                             if log_callback:
                                 log_callback(f"Analyzing batch {batch_idx}/{len(batches)}: {len(batch)} chunks from {len(files_in_batch)} file(s)")
                             
-                            # Rate limiting: wait 15 seconds between batches (except first batch after initial wait)
+                            # Rate limiting: wait 2 seconds between batches (NVIDIA API is more lenient)
                             if batch_idx > 1:
-                                wait_time = 15
+                                wait_time = 2
                                 if st:
-                                    st.write(f"⏳ Waiting {wait_time} seconds (rate limit: 5 req/min)...")
+                                    st.write(f"⏳ Waiting {wait_time} seconds (rate limit protection)...")
                                 if log_callback:
                                     log_callback(f"⏳ Rate limit wait: {wait_time} seconds")
                                 time.sleep(wait_time)
@@ -285,22 +272,49 @@ class ScanningAgent:
                                             # Check for errors in response
                                             if "error" in result_data:
                                                 error_msg = result_data.get("error", "Unknown error")
-                                                # If it's a JSON parsing error, show debug info
+                                                # If it's a JSON parsing error, try to extract JSON from raw output
                                                 if "Could not parse LLM response" in error_msg:
                                                     raw_output = result_data.get("raw_output_preview", "")
-                                                    if st:
-                                                        st.error(f"❌ JSON parsing failed. LLM response preview:")
-                                                        st.code(raw_output[:500] if raw_output else "No preview available", language="text")
-                                                    if log_callback:
-                                                        log_callback(f"❌ JSON parsing failed. Response preview: {raw_output[:200] if raw_output else 'No preview'}...")
-                                                    result = None
-                                                    break  # Don't retry JSON parsing errors
+                                                    if raw_output:
+                                                        # Try one more time with improved extraction
+                                                        try:
+                                                            # Import the improved extraction function
+                                                            from scanner.tools.llm_scan_tool import find_json_object
+                                                            import re
+                                                            
+                                                            # Try to find JSON in the raw output
+                                                            json_str = find_json_object(raw_output)
+                                                            if json_str:
+                                                                findings_data = json.loads(json_str)
+                                                                # Success! Replace result with parsed JSON
+                                                                result = json.dumps(findings_data, indent=2)
+                                                                if log_callback:
+                                                                    log_callback(f"✅ Successfully extracted JSON from raw output after initial parse failure")
+                                                                break  # Success, continue processing
+                                                        except Exception as retry_error:
+                                                            # Still failed, show error
+                                                            if st:
+                                                                st.error(f"❌ JSON parsing failed. LLM response preview:")
+                                                                st.code(raw_output[:500] if raw_output else "No preview available", language="text")
+                                                            if log_callback:
+                                                                log_callback(f"❌ JSON parsing failed even after retry. Response preview: {raw_output[:200] if raw_output else 'No preview'}...")
+                                                            result = None
+                                                            break
+                                                    else:
+                                                        result = None
+                                                        break
                                                 
-                                                # Handle other errors
+                                                # Handle other errors (not JSON parsing) - show full error
+                                                raw_preview = result_data.get("raw_output_preview", "")
                                                 if log_callback:
                                                     log_callback(f"❌ Error in response: {error_msg[:200]}")
+                                                    if raw_preview:
+                                                        log_callback(f"📄 Raw output preview: {raw_preview[:300]}...")
                                                 if st:
-                                                    st.warning(f"⚠️ Analysis error: {error_msg[:200]}")
+                                                    st.error(f"⚠️ Analysis error: {error_msg}")
+                                                    if raw_preview:
+                                                        with st.expander("📄 View LLM raw output"):
+                                                            st.code(raw_preview, language="text")
                                                 result = None
                                                 break
                                             
@@ -315,8 +329,8 @@ class ScanningAgent:
                                     
                                 except Exception as llm_err:
                                     error_str = str(llm_err)
-                                    if ("quota" in error_str.lower() or "429" in error_str or "RESOURCE_EXHAUSTED" in error_str) and retry < max_retries - 1:
-                                        wait_seconds = 60
+                                    if ("quota" in error_str.lower() or "429" in error_str or "rate limit" in error_str.lower()) and retry < max_retries - 1:
+                                        wait_seconds = 10  # Shorter wait for NVIDIA API
                                         if st:
                                             st.warning(f"⏳ Rate limit exception. Waiting {wait_seconds} seconds...")
                                         if log_callback:
