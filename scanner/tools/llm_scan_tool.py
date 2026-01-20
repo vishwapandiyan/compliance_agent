@@ -23,6 +23,17 @@ def find_json_object(text):
     Returns:
         String containing the first complete JSON object, or None if not found
     """
+    # Clean up common issues first
+    text = text.strip()
+    
+    # Handle double braces at the start (LLM sometimes escapes them)
+    if text.startswith('{{'):
+        text = '{' + text[2:]
+    
+    # Handle double braces at the end
+    if text.endswith('}}'):
+        text = text[:-2] + '}'
+    
     # Find the first opening brace
     start_idx = text.find('{')
     if start_idx == -1:
@@ -55,7 +66,10 @@ def find_json_object(text):
                 brace_count -= 1
                 if brace_count == 0:
                     # Found complete JSON object
-                    return text[start_idx:i+1]
+                    json_str = text[start_idx:i+1]
+                    # Fix any remaining double braces in the JSON
+                    json_str = json_str.replace('{{', '{').replace('}}', '}')
+                    return json_str
     
     return None
 
@@ -371,6 +385,19 @@ IMPORTANT FILE NAMING:
             output_text = ""
         elif not isinstance(output_text, str):
             output_text = str(output_text)
+        
+        # Clean up common LLM formatting issues
+        if output_text:
+            output_text = output_text.strip()
+            # Remove markdown code blocks if present
+            if output_text.startswith('```') and output_text.endswith('```'):
+                # Extract content between code blocks
+                lines = output_text.split('\n')
+                if len(lines) > 2:
+                    output_text = '\n'.join(lines[1:-1]).strip()
+            # Handle double braces at start/end (common LLM escape issue)
+            if output_text.startswith('{{') and output_text.endswith('}}'):
+                output_text = output_text[1:-1]
         
         # Handle None or empty response with better debugging
         if not output_text or output_text.strip() == "" or output_text == "None":
